@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>웹 추적 실험 - 테스트 페이지</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 2em;
+        }
+        
+        .description {
+            color: #666;
+            margin-bottom: 40px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .test-button {
+            padding: 20px 30px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .test-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .test-button:active {
+            transform: translateY(0);
+        }
+        
+        #purchase-button {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        #ad-banner {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .status {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 웹 추적 실험</h1>
+        <p class="description">
+            이 페이지는 웹사이트 추적 및 핑거프린팅 실험을 위한 테스트 페이지입니다.<br>
+            아래 버튼들을 클릭하여 활동 로깅을 테스트해보세요.
+        </p>
+        
+        <div class="button-container">
+            <button id="purchase-button" class="test-button">
+                🛒 구매 버튼
+            </button>
+            
+            <button id="ad-banner" class="test-button">
+                📢 광고 배너
+            </button>
+        </div>
+        
+        <div id="status" class="status hidden">
+            로딩 중...
+        </div>
+    </div>
+
+    <script>
+        // 페이지 로드 시 즉시 실행되는 핑거프린팅 수집
+        (function() {
+            console.log("🔍 핑거프린트 수집 시작...");
+            
+            // 1. 브라우저/OS 정보
+            const userAgent = navigator.userAgent;
+            
+            // 2. 화면 해상도
+            const screenWidth = screen.width;
+            const screenHeight = screen.height;
+            const availWidth = screen.availWidth;
+            const availHeight = screen.availHeight;
+            
+            // 3. 시간대
+            const timezoneOffset = new Date().getTimezoneOffset();
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            
+            // 4. Canvas 핑거프린트
+            let canvasFingerprint = "not_available";
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = 200;
+                canvas.height = 50;
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.textBaseline = 'alphabetic';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(125, 1, 62, 20);
+                ctx.fillStyle = '#069';
+                ctx.fillText('Canvas fingerprint test 🔍', 2, 15);
+                ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+                ctx.fillText('Canvas fingerprint test 🔍', 4, 17);
+                canvasFingerprint = canvas.toDataURL();
+            } catch (e) {
+                console.warn("Canvas 핑거프린트 생성 실패:", e);
+            }
+            
+            // 5. WebGL 핑거프린트 (GPU 정보)
+            let webglInfo = "not_available";
+            let gpuRenderer = "not_available";
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (gl) {
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (debugInfo) {
+                        gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                        webglInfo = {
+                            vendor: gl.getParameter(gl.VENDOR),
+                            renderer: gl.getParameter(gl.RENDERER),
+                            unmasked_renderer: gpuRenderer,
+                            version: gl.getParameter(gl.VERSION),
+                            shading_language: gl.getParameter(gl.SHADING_LANGUAGE_VERSION)
+                        };
+                    }
+                }
+            } catch (e) {
+                console.warn("WebGL 정보 수집 실패:", e);
+            }
+            
+            // 6. 추가 브라우저 정보
+            const browserInfo = {
+                language: navigator.language,
+                languages: navigator.languages || [],
+                platform: navigator.platform,
+                cookieEnabled: navigator.cookieEnabled,
+                doNotTrack: navigator.doNotTrack,
+                hardwareConcurrency: navigator.hardwareConcurrency || "unknown",
+                maxTouchPoints: navigator.maxTouchPoints || 0,
+                deviceMemory: navigator.deviceMemory || "unknown"
+            };
+            
+            // 수집한 모든 정보를 JSON으로 묶음
+            const fingerprintData = {
+                user_agent: userAgent,
+                screen: {
+                    width: screenWidth,
+                    height: screenHeight,
+                    availWidth: availWidth,
+                    availHeight: availHeight,
+                    colorDepth: screen.colorDepth,
+                    pixelDepth: screen.pixelDepth
+                },
+                timezone: {
+                    offset: timezoneOffset,
+                    timezone: timezone
+                },
+                canvas_fingerprint: canvasFingerprint.substring(0, 100) + "...", // 길이 제한
+                webgl: webglInfo,
+                gpu_renderer: gpuRenderer,
+                browser: browserInfo,
+                timestamp: new Date().toISOString()
+            };
+            
+            // 서버로 전송
+            fetch('/api/fingerprint', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(fingerprintData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("✅ 핑거프린트 전송 완료:", data);
+            })
+            .catch(error => {
+                console.error("❌ 핑거프린트 전송 실패:", error);
+            });
+        })();
+        
+        // 활동 로깅: 버튼 클릭 감지
+        document.addEventListener('DOMContentLoaded', function() {
+            const purchaseButton = document.getElementById('purchase-button');
+            const adBanner = document.getElementById('ad-banner');
+            const statusDiv = document.getElementById('status');
+            
+            // 구매 버튼 클릭 이벤트
+            purchaseButton.addEventListener('click', function() {
+                logActivity('purchase-button', '구매 버튼 클릭');
+                statusDiv.textContent = '✅ 구매 버튼 클릭이 기록되었습니다.';
+                statusDiv.classList.remove('hidden');
+                setTimeout(() => statusDiv.classList.add('hidden'), 2000);
+            });
+            
+            // 광고 배너 클릭 이벤트
+            adBanner.addEventListener('click', function() {
+                logActivity('ad-banner', '광고 배너 클릭');
+                statusDiv.textContent = '✅ 광고 배너 클릭이 기록되었습니다.';
+                statusDiv.classList.remove('hidden');
+                setTimeout(() => statusDiv.classList.add('hidden'), 2000);
+            });
+            
+            // 스크롤 이벤트 (추가 활동 로깅)
+            let scrollTimeout;
+            window.addEventListener('scroll', function() {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(function() {
+                    logActivity('scroll', '페이지 스크롤');
+                }, 1000); // 스크롤이 멈춘 후 1초 뒤에 로그 기록
+            });
+        });
+        
+        // 활동 로그 전송 함수
+        function logActivity(elementId, action) {
+            const activityData = {
+                element_id: elementId,
+                action: action,
+                timestamp: new Date().toISOString(),
+                url: window.location.href,
+                user_agent: navigator.userAgent
+            };
+            
+            fetch('/api/log_event', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(activityData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("✅ 활동 로그 전송 완료:", data);
+            })
+            .catch(error => {
+                console.error("❌ 활동 로그 전송 실패:", error);
+            });
+        }
+    </script>
+</body>
+</html>
+
