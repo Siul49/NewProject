@@ -150,6 +150,31 @@ async def receive_log_event(request: Request):
         print(f"❌ 활동 로그 수신 오류: {e}")
         return {"status": "error", "message": str(e)}
 
+@app.post("/api/behavior_pattern")
+async def receive_behavior_pattern(request: Request):
+    """
+    API 엔드포인트 3: 행동 패턴 수신
+    마우스 움직임 패턴, 키보드 타이핑 패턴 등 행동 생체인식 데이터 수신
+    """
+    try:
+        data = await request.json()
+        
+        # 클라이언트 IP 추가
+        client_host = request.client.host if request.client else "unknown"
+        data["client_ip"] = client_host
+        
+        # 터미널 로그 출력
+        pattern_type = data.get("type", "unknown")
+        log_to_console(f"BEHAVIOR PATTERN ({pattern_type})", data, request)
+        
+        # Firebase에 저장
+        save_to_firestore("behavior_patterns", data)
+        
+        return {"status": "success", "message": f"{pattern_type} 패턴이 수신되었습니다."}
+    except Exception as e:
+        print(f"❌ 행동 패턴 수신 오류: {e}")
+        return {"status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("🚀 웹 추적 실험 서버 시작")
@@ -158,5 +183,6 @@ if __name__ == "__main__":
     print("📖 API 문서: http://127.0.0.1:8000/docs")
     print("=" * 60 + "\n")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    # reload 옵션을 사용하려면 import string 형식으로 전달해야 함
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 

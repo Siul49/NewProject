@@ -120,127 +120,843 @@
     </div>
 
     <script>
-        // 페이지 로드 시 즉시 실행되는 핑거프린팅 수집
+        // ============================================
+        // 1. 고유 ID 관리 모듈
+        // ============================================
+        const UserIDManager = {
+            // 고유 ID 생성 또는 가져오기
+            getOrCreateUserID: function() {
+                const STORAGE_KEY = 'user_unique_id';
+                const COOKIE_NAME = 'user_unique_id';
+                
+                // 쿠키에서 ID 확인
+                let userId = this.getCookie(COOKIE_NAME);
+                
+                // 쿠키에 없으면 로컬스토리지에서 확인
+                if (!userId && typeof(Storage) !== "undefined" && localStorage) {
+                    userId = localStorage.getItem(STORAGE_KEY);
+                }
+                
+                // 둘 다 없으면 새로 생성
+                if (!userId) {
+                    userId = this.generateUniqueID();
+                    // 쿠키와 로컬스토리지 모두에 저장
+                    this.setCookie(COOKIE_NAME, userId, 365); // 1년
+                    if (typeof(Storage) !== "undefined" && localStorage) {
+                        localStorage.setItem(STORAGE_KEY, userId);
+                    }
+                }
+                
+                return userId;
+            },
+            
+            // 고유 ID 생성 (타임스탬프 + 랜덤)
+            generateUniqueID: function() {
+                return 'uid_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            },
+            
+            // 쿠키 설정
+            setCookie: function(name, value, days) {
+                const expires = new Date();
+                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+                document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/';
+            },
+            
+            // 쿠키 가져오기
+            getCookie: function(name) {
+                const nameEQ = name + "=";
+                const ca = document.cookie.split(';');
+                for (let i = 0; i < ca.length; i++) {
+                    let c = ca[i];
+                    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+                }
+                return null;
+            }
+        };
+
+        // ============================================
+        // 2. 기본 브라우저 정보 수집 모듈
+        // ============================================
+        const BrowserInfoCollector = {
+            collect: function() {
+                return {
+                    user_agent: navigator.userAgent,
+                    language: navigator.language,
+                    languages: navigator.languages || [],
+                    platform: navigator.platform,
+                    cookieEnabled: navigator.cookieEnabled,
+                    doNotTrack: navigator.doNotTrack,
+                    hardwareConcurrency: navigator.hardwareConcurrency || "unknown",
+                    maxTouchPoints: navigator.maxTouchPoints || 0,
+                    deviceMemory: navigator.deviceMemory || "unknown"
+                };
+            }
+        };
+
+        // ============================================
+        // 3. 화면 정보 수집 모듈
+        // ============================================
+        const ScreenInfoCollector = {
+            collect: function() {
+                return {
+                    width: screen.width,
+                    height: screen.height,
+                    availWidth: screen.availWidth,
+                    availHeight: screen.availHeight,
+                    colorDepth: screen.colorDepth,
+                    pixelDepth: screen.pixelDepth
+                };
+            }
+        };
+
+        // ============================================
+        // 4. 시간대 정보 수집 모듈
+        // ============================================
+        const TimezoneCollector = {
+            collect: function() {
+                return {
+                    offset: new Date().getTimezoneOffset(),
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                };
+            }
+        };
+
+        // ============================================
+        // 5. 정교한 Canvas 핑거프린트 모듈
+        // ============================================
+        const CanvasFingerprintCollector = {
+            collect: function() {
+                const fingerprints = [];
+                
+                // 여러 변형의 Canvas 핑거프린트 생성
+                const variations = [
+                    { width: 200, height: 50, text: 'Canvas fingerprint test 🔍', font: '14px Arial' },
+                    { width: 300, height: 100, text: 'Fingerprint Test 123', font: '16px Times New Roman' },
+                    { width: 150, height: 75, text: 'Test', font: '20px Verdana' }
+                ];
+                
+                variations.forEach((variation, index) => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = variation.width;
+                        canvas.height = variation.height;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // 다양한 렌더링 기법 적용
+                        ctx.textBaseline = 'top';
+                        ctx.font = variation.font;
+                        ctx.fillStyle = '#f60';
+                        ctx.fillRect(125, 1, 62, 20);
+                        ctx.fillStyle = '#069';
+                        ctx.fillText(variation.text, 2, 15);
+                        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+                        ctx.fillText(variation.text, 4, 17);
+                        
+                        // 그라디언트 추가
+                        const gradient = ctx.createLinearGradient(0, 0, variation.width, variation.height);
+                        gradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)');
+                        gradient.addColorStop(1, 'rgba(0, 0, 255, 0.5)');
+                        ctx.fillStyle = gradient;
+                        ctx.fillRect(10, 10, 50, 30);
+                        
+                        const dataURL = canvas.toDataURL();
+                        fingerprints.push({
+                            variation: index + 1,
+                            hash: this.hashCode(dataURL),
+                            preview: dataURL.substring(0, 100) + "..."
+                        });
+                    } catch (e) {
+                        console.warn(`Canvas 핑거프린트 ${index + 1} 생성 실패:`, e);
+                    }
+                });
+                
+                return fingerprints.length > 0 ? fingerprints : "not_available";
+            },
+            
+            hashCode: function(str) {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                return hash.toString();
+            }
+        };
+
+        // ============================================
+        // 6. 정교한 WebGL 핑거프린트 모듈
+        // ============================================
+        const WebGLFingerprintCollector = {
+            collect: function() {
+                const fingerprints = [];
+                
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    
+                    if (!gl) {
+                        return "not_available";
+                    }
+                    
+                    // 기본 WebGL 정보
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    const basicInfo = {
+                        vendor: gl.getParameter(gl.VENDOR),
+                        renderer: gl.getParameter(gl.RENDERER),
+                        version: gl.getParameter(gl.VERSION),
+                        shading_language: gl.getParameter(gl.SHADING_LANGUAGE_VERSION)
+                    };
+                    
+                    if (debugInfo) {
+                        basicInfo.unmasked_vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                        basicInfo.unmasked_renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                    }
+                    
+                    // WebGL 파라미터 수집
+                    const parameters = [
+                        'MAX_TEXTURE_SIZE', 'MAX_CUBE_MAP_TEXTURE_SIZE', 'MAX_VIEWPORT_DIMS',
+                        'MAX_VERTEX_ATTRIBS', 'MAX_VERTEX_UNIFORM_VECTORS', 'MAX_FRAGMENT_UNIFORM_VECTORS',
+                        'ALIASED_LINE_WIDTH_RANGE', 'ALIASED_POINT_SIZE_RANGE'
+                    ];
+                    
+                    const paramValues = {};
+                    parameters.forEach(param => {
+                        try {
+                            paramValues[param] = gl.getParameter(gl[param]);
+                        } catch (e) {}
+                    });
+                    
+                    // WebGL 확장 정보
+                    const extensions = gl.getSupportedExtensions() || [];
+                    
+                    // WebGL 렌더링 핑거프린트
+                    let renderFingerprint = "not_available";
+                    try {
+                        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+                        gl.shaderSource(vertexShader, `
+                            attribute vec2 attr;
+                            void main(void) { gl_Position = vec4(attr, 0.0, 1.0); }
+                        `);
+                        gl.compileShader(vertexShader);
+                        
+                        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+                        gl.shaderSource(fragmentShader, `
+                            precision mediump float;
+                            void main(void) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); }
+                        `);
+                        gl.compileShader(fragmentShader);
+                        
+                        const program = gl.createProgram();
+                        gl.attachShader(program, vertexShader);
+                        gl.attachShader(program, fragmentShader);
+                        gl.linkProgram(program);
+                        gl.useProgram(program);
+                        
+                        const buffer = gl.createBuffer();
+                        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+                        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.2, -0.9, 0, 0.4, -0.26, 0, 0, 0.732134444, 0]), gl.STATIC_DRAW);
+                        
+                        const attr = gl.getAttribLocation(program, 'attr');
+                        gl.enableVertexAttribArray(attr);
+                        gl.vertexAttribPointer(attr, 3, gl.FLOAT, false, 0, 0);
+                        gl.drawArrays(gl.TRIANGLES, 0, 3);
+                        
+                        const pixels = new Uint8Array(4);
+                        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                        renderFingerprint = Array.from(pixels).join(',');
+                    } catch (e) {
+                        console.warn("WebGL 렌더링 핑거프린트 생성 실패:", e);
+                    }
+                    
+                    return {
+                        basic_info: basicInfo,
+                        parameters: paramValues,
+                        extensions: extensions,
+                        render_fingerprint: renderFingerprint
+                    };
+                } catch (e) {
+                    console.warn("WebGL 정보 수집 실패:", e);
+                    return "not_available";
+                }
+            }
+        };
+
+        // ============================================
+        // 7. AudioContext 핑거프린트 모듈
+        // ============================================
+        const AudioFingerprintCollector = {
+            collect: function(callback) {
+                let audioFingerprint = "not_available";
+                
+                try {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioContext.createOscillator();
+                    const analyser = audioContext.createAnalyser();
+                    const gainNode = audioContext.createGain();
+                    
+                    gainNode.gain.value = 0; // 소리 없이
+                    oscillator.type = 'triangle';
+                    oscillator.connect(analyser);
+                    analyser.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.start(0);
+                    
+                    setTimeout(() => {
+                        try {
+                            const output = new Float32Array(analyser.frequencyBinCount);
+                            analyser.getFloatFrequencyData(output);
+                            let hash = 0;
+                            for (let i = 0; i < output.length; i++) {
+                                hash += Math.abs(output[i]);
+                            }
+                            audioFingerprint = hash.toString();
+                            oscillator.stop();
+                            audioContext.close();
+                            if (callback) callback(audioFingerprint);
+                        } catch (e) {
+                            console.warn("AudioContext 데이터 수집 실패:", e);
+                            if (callback) callback(audioFingerprint);
+                        }
+                    }, 100);
+                } catch (e) {
+                    console.warn("AudioContext 핑거프린트 생성 실패:", e);
+                    if (callback) callback(audioFingerprint);
+                }
+                
+                return audioFingerprint;
+            }
+        };
+
+        // ============================================
+        // 8. Font 핑거프린트 모듈
+        // ============================================
+        const FontFingerprintCollector = {
+            collect: function() {
+                const testFonts = [
+                    'Arial', 'Verdana', 'Times New Roman', 'Courier New', 'Georgia',
+                    'Palatino', 'Garamond', 'Bookman', 'Comic Sans MS', 'Trebuchet MS',
+                    'Impact', 'Lucida Console', 'Tahoma', 'Courier', 'Lucida Sans Unicode',
+                    '맑은 고딕', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Nanum Gothic',
+                    'Noto Sans KR', '나눔고딕', 'NanumGothic'
+                ];
+                
+                const fontFingerprint = [];
+                const testString = "mmmmmmmmmmlli";
+                const testSize = "72px";
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                context.textBaseline = 'top';
+                context.font = testSize + ' monospace';
+                const baselineWidth = context.measureText(testString).width;
+                
+                testFonts.forEach(font => {
+                    context.font = testSize + ' ' + font + ', monospace';
+                    const width = context.measureText(testString).width;
+                    if (width !== baselineWidth) {
+                        fontFingerprint.push(font);
+                    }
+                });
+                
+                return fontFingerprint;
+            }
+        };
+
+        // ============================================
+        // 9. WebRTC IP 수집 모듈
+        // ============================================
+        const WebRTCCollector = {
+            collect: function(callback) {
+                let webrtcIPs = [];
+                
+                try {
+                    const rtcConfig = {
+                        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                    };
+                    const pc = new RTCPeerConnection(rtcConfig);
+                    pc.createDataChannel("");
+                    
+                    pc.onicecandidate = function(event) {
+                        if (event.candidate) {
+                            const candidate = event.candidate.candidate;
+                            const ipMatch = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/.exec(candidate);
+                            if (ipMatch && !webrtcIPs.includes(ipMatch[1])) {
+                                webrtcIPs.push(ipMatch[1]);
+                            }
+                        }
+                    };
+                    
+                    pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                    
+                    setTimeout(() => {
+                        pc.close();
+                        if (callback) callback(webrtcIPs);
+                    }, 2000);
+                } catch (e) {
+                    console.warn("WebRTC 수집 실패:", e);
+                    if (callback) callback(webrtcIPs);
+                }
+            }
+        };
+
+        // ============================================
+        // 10. Battery API 모듈
+        // ============================================
+        const BatteryCollector = {
+            collect: function(callback) {
+                let batteryInfo = "not_available";
+                
+                if (navigator.getBattery) {
+                    navigator.getBattery().then(battery => {
+                        batteryInfo = {
+                            charging: battery.charging,
+                            chargingTime: battery.chargingTime,
+                            dischargingTime: battery.dischargingTime,
+                            level: battery.level
+                        };
+                        if (callback) callback(batteryInfo);
+                    }).catch(() => {
+                        if (callback) callback(batteryInfo);
+                    });
+                } else {
+                    if (callback) callback(batteryInfo);
+                }
+            }
+        };
+
+        // ============================================
+        // 11. MediaDevices 모듈
+        // ============================================
+        const MediaDevicesCollector = {
+            collect: function(callback) {
+                let mediaDevices = "not_available";
+                
+                if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                    navigator.mediaDevices.enumerateDevices().then(devices => {
+                        mediaDevices = devices.map(device => ({
+                            kind: device.kind,
+                            label: device.label || "permission_denied",
+                            deviceId: device.deviceId ? device.deviceId.substring(0, 20) + "..." : "none"
+                        }));
+                        if (callback) callback(mediaDevices);
+                    }).catch(() => {
+                        if (callback) callback(mediaDevices);
+                    });
+                } else {
+                    if (callback) callback(mediaDevices);
+                }
+            }
+        };
+
+        // ============================================
+        // 12. Performance API 모듈
+        // ============================================
+        const PerformanceCollector = {
+            collect: function() {
+                return {
+                    timing: performance.timing ? {
+                        navigationStart: performance.timing.navigationStart,
+                        domContentLoaded: performance.timing.domContentLoadedEventEnd - performance.timing.navigationStart,
+                        loadComplete: performance.timing.loadEventEnd - performance.timing.navigationStart
+                    } : "not_available",
+                    memory: performance.memory ? {
+                        usedJSHeapSize: performance.memory.usedJSHeapSize,
+                        totalJSHeapSize: performance.memory.totalJSHeapSize,
+                        jsHeapSizeLimit: performance.memory.jsHeapSizeLimit
+                    } : "not_available"
+                };
+            }
+        };
+
+        // ============================================
+        // 13. CSS 미디어 쿼리 모듈
+        // ============================================
+        const MediaQueryCollector = {
+            collect: function() {
+                return {
+                    prefersColorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+                    prefersReducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+                    pointer: window.matchMedia('(pointer: fine)').matches ? 'fine' : 'coarse',
+                    hover: window.matchMedia('(hover: hover)').matches
+                };
+            }
+        };
+
+        // ============================================
+        // 14. Storage 정보 모듈
+        // ============================================
+        const StorageCollector = {
+            collect: function() {
+                return {
+                    localStorage: typeof(Storage) !== "undefined" && typeof localStorage !== "undefined",
+                    sessionStorage: typeof(Storage) !== "undefined" && typeof sessionStorage !== "undefined",
+                    indexedDB: typeof indexedDB !== "undefined"
+                };
+            }
+        };
+
+        // ============================================
+        // 15. 마우스 움직임 패턴 수집 모듈
+        // ============================================
+        const MousePatternCollector = {
+            movements: [],
+            startTime: null,
+            isCollecting: false,
+            
+            start: function() {
+                this.movements = [];
+                this.startTime = Date.now();
+                this.isCollecting = true;
+                
+                document.addEventListener('mousemove', this.onMouseMove.bind(this));
+                document.addEventListener('mouseleave', this.stop.bind(this));
+                
+                // 10초 후 자동으로 수집 중지
+                setTimeout(() => this.stop(), 10000);
+            },
+            
+            onMouseMove: function(event) {
+                if (!this.isCollecting) return;
+                
+                const now = Date.now();
+                const timeSinceStart = now - this.startTime;
+                
+                this.movements.push({
+                    x: event.clientX,
+                    y: event.clientY,
+                    timestamp: timeSinceStart,
+                    pageX: event.pageX,
+                    pageY: event.pageY
+                });
+                
+                // 최대 100개까지만 저장
+                if (this.movements.length > 100) {
+                    this.movements.shift();
+                }
+            },
+            
+            stop: function() {
+                this.isCollecting = false;
+                document.removeEventListener('mousemove', this.onMouseMove.bind(this));
+                document.removeEventListener('mouseleave', this.stop.bind(this));
+            },
+            
+            getPattern: function() {
+                if (this.movements.length < 2) {
+                    return null;
+                }
+                
+                // 패턴 분석
+                const velocities = [];
+                const accelerations = [];
+                const angles = [];
+                
+                for (let i = 1; i < this.movements.length; i++) {
+                    const prev = this.movements[i - 1];
+                    const curr = this.movements[i];
+                    
+                    const dx = curr.x - prev.x;
+                    const dy = curr.y - prev.y;
+                    const dt = curr.timestamp - prev.timestamp;
+                    
+                    if (dt > 0) {
+                        const velocity = Math.sqrt(dx * dx + dy * dy) / dt;
+                        velocities.push(velocity);
+                        
+                        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                        angles.push(angle);
+                    }
+                }
+                
+                for (let i = 1; i < velocities.length; i++) {
+                    const accel = velocities[i] - velocities[i - 1];
+                    accelerations.push(accel);
+                }
+                
+                // 통계 계산
+                const avgVelocity = velocities.reduce((a, b) => a + b, 0) / velocities.length;
+                const avgAcceleration = accelerations.length > 0 ? 
+                    accelerations.reduce((a, b) => a + b, 0) / accelerations.length : 0;
+                
+                return {
+                    totalMovements: this.movements.length,
+                    duration: this.movements[this.movements.length - 1].timestamp,
+                    averageVelocity: avgVelocity,
+                    averageAcceleration: avgAcceleration,
+                    movementCount: this.movements.length,
+                    sampleData: this.movements.slice(0, 10) // 처음 10개 샘플만
+                };
+            }
+        };
+
+        // ============================================
+        // 16. 키보드 타이핑 패턴 수집 모듈
+        // ============================================
+        const KeyboardPatternCollector = {
+            keystrokes: [],
+            startTime: null,
+            isCollecting: false,
+            
+            start: function() {
+                this.keystrokes = [];
+                this.startTime = Date.now();
+                this.isCollecting = true;
+                
+                document.addEventListener('keydown', this.onKeyDown.bind(this));
+                document.addEventListener('keyup', this.onKeyUp.bind(this));
+                
+                // 30초 후 자동으로 수집 중지
+                setTimeout(() => this.stop(), 30000);
+            },
+            
+            onKeyDown: function(event) {
+                if (!this.isCollecting) return;
+                
+                const now = Date.now();
+                const timeSinceStart = now - this.startTime;
+                
+                this.keystrokes.push({
+                    key: event.key,
+                    code: event.code,
+                    timestamp: timeSinceStart,
+                    type: 'down'
+                });
+            },
+            
+            onKeyUp: function(event) {
+                if (!this.isCollecting) return;
+                
+                const now = Date.now();
+                const timeSinceStart = now - this.startTime;
+                
+                this.keystrokes.push({
+                    key: event.key,
+                    code: event.code,
+                    timestamp: timeSinceStart,
+                    type: 'up'
+                });
+            },
+            
+            stop: function() {
+                this.isCollecting = false;
+                document.removeEventListener('keydown', this.onKeyDown.bind(this));
+                document.removeEventListener('keyup', this.onKeyUp.bind(this));
+            },
+            
+            getPattern: function() {
+                if (this.keystrokes.length < 2) {
+                    return null;
+                }
+                
+                // 키 누름-떼기 쌍 찾기
+                const keyPairs = [];
+                for (let i = 0; i < this.keystrokes.length - 1; i++) {
+                    if (this.keystrokes[i].type === 'down' && this.keystrokes[i + 1].type === 'up' && 
+                        this.keystrokes[i].key === this.keystrokes[i + 1].key) {
+                        const holdTime = this.keystrokes[i + 1].timestamp - this.keystrokes[i].timestamp;
+                        keyPairs.push({
+                            key: this.keystrokes[i].key,
+                            holdTime: holdTime
+                        });
+                    }
+                }
+                
+                // 키 간 간격 계산
+                const intervals = [];
+                for (let i = 1; i < this.keystrokes.length; i++) {
+                    if (this.keystrokes[i].type === 'down' && this.keystrokes[i - 1].type === 'down') {
+                        intervals.push(this.keystrokes[i].timestamp - this.keystrokes[i - 1].timestamp);
+                    }
+                }
+                
+                // 통계 계산
+                const avgHoldTime = keyPairs.length > 0 ? 
+                    keyPairs.reduce((a, b) => a + b.holdTime, 0) / keyPairs.length : 0;
+                const avgInterval = intervals.length > 0 ? 
+                    intervals.reduce((a, b) => a + b, 0) / intervals.length : 0;
+                
+                return {
+                    totalKeystrokes: this.keystrokes.length,
+                    duration: this.keystrokes[this.keystrokes.length - 1].timestamp,
+                    averageHoldTime: avgHoldTime,
+                    averageInterval: avgInterval,
+                    keyPairsCount: keyPairs.length,
+                    sampleData: keyPairs.slice(0, 10) // 처음 10개 샘플만
+                };
+            }
+        };
+
+        // ============================================
+        // 17. 데이터 전송 모듈
+        // ============================================
+        const DataSender = {
+            sendFingerprint: function(data) {
+                fetch('/api/fingerprint', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("✅ 핑거프린트 전송 완료:", data);
+                })
+                .catch(error => {
+                    console.error("❌ 핑거프린트 전송 실패:", error);
+                });
+            },
+            
+            sendActivity: function(data) {
+                fetch('/api/log_event', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("✅ 활동 로그 전송 완료:", data);
+                })
+                .catch(error => {
+                    console.error("❌ 활동 로그 전송 실패:", error);
+                });
+            },
+            
+            sendBehaviorPattern: function(data) {
+                fetch('/api/behavior_pattern', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("✅ 행동 패턴 전송 완료:", data);
+                })
+                .catch(error => {
+                    console.error("❌ 행동 패턴 전송 실패:", error);
+                });
+            }
+        };
+
+        // ============================================
+        // 메인 실행 로직
+        // ============================================
         (function() {
             console.log("🔍 핑거프린트 수집 시작...");
             
-            // 1. 브라우저/OS 정보
-            const userAgent = navigator.userAgent;
+            // 고유 ID 가져오기
+            const userId = UserIDManager.getOrCreateUserID();
+            console.log("👤 사용자 ID:", userId);
             
-            // 2. 화면 해상도
-            const screenWidth = screen.width;
-            const screenHeight = screen.height;
-            const availWidth = screen.availWidth;
-            const availHeight = screen.availHeight;
-            
-            // 3. 시간대
-            const timezoneOffset = new Date().getTimezoneOffset();
-            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            
-            // 4. Canvas 핑거프린트
-            let canvasFingerprint = "not_available";
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = 200;
-                canvas.height = 50;
-                const ctx = canvas.getContext('2d');
-                ctx.textBaseline = 'top';
-                ctx.font = '14px Arial';
-                ctx.textBaseline = 'alphabetic';
-                ctx.fillStyle = '#f60';
-                ctx.fillRect(125, 1, 62, 20);
-                ctx.fillStyle = '#069';
-                ctx.fillText('Canvas fingerprint test 🔍', 2, 15);
-                ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-                ctx.fillText('Canvas fingerprint test 🔍', 4, 17);
-                canvasFingerprint = canvas.toDataURL();
-            } catch (e) {
-                console.warn("Canvas 핑거프린트 생성 실패:", e);
-            }
-            
-            // 5. WebGL 핑거프린트 (GPU 정보)
-            let webglInfo = "not_available";
-            let gpuRenderer = "not_available";
-            try {
-                const canvas = document.createElement('canvas');
-                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-                if (gl) {
-                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                    if (debugInfo) {
-                        gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-                        webglInfo = {
-                            vendor: gl.getParameter(gl.VENDOR),
-                            renderer: gl.getParameter(gl.RENDERER),
-                            unmasked_renderer: gpuRenderer,
-                            version: gl.getParameter(gl.VERSION),
-                            shading_language: gl.getParameter(gl.SHADING_LANGUAGE_VERSION)
-                        };
-                    }
-                }
-            } catch (e) {
-                console.warn("WebGL 정보 수집 실패:", e);
-            }
-            
-            // 6. 추가 브라우저 정보
-            const browserInfo = {
-                language: navigator.language,
-                languages: navigator.languages || [],
-                platform: navigator.platform,
-                cookieEnabled: navigator.cookieEnabled,
-                doNotTrack: navigator.doNotTrack,
-                hardwareConcurrency: navigator.hardwareConcurrency || "unknown",
-                maxTouchPoints: navigator.maxTouchPoints || 0,
-                deviceMemory: navigator.deviceMemory || "unknown"
-            };
-            
-            // 수집한 모든 정보를 JSON으로 묶음
+            // 동기적으로 수집 가능한 정보
             const fingerprintData = {
-                user_agent: userAgent,
-                screen: {
-                    width: screenWidth,
-                    height: screenHeight,
-                    availWidth: availWidth,
-                    availHeight: availHeight,
-                    colorDepth: screen.colorDepth,
-                    pixelDepth: screen.pixelDepth
-                },
-                timezone: {
-                    offset: timezoneOffset,
-                    timezone: timezone
-                },
-                canvas_fingerprint: canvasFingerprint.substring(0, 100) + "...", // 길이 제한
-                webgl: webglInfo,
-                gpu_renderer: gpuRenderer,
-                browser: browserInfo,
+                user_id: userId,
+                user_agent: BrowserInfoCollector.collect().user_agent,
+                screen: ScreenInfoCollector.collect(),
+                timezone: TimezoneCollector.collect(),
+                canvas_fingerprint: CanvasFingerprintCollector.collect(),
+                webgl: WebGLFingerprintCollector.collect(),
+                audio_fingerprint: AudioFingerprintCollector.collect(),
+                font_fingerprint: FontFingerprintCollector.collect(),
+                performance: PerformanceCollector.collect(),
+                media_queries: MediaQueryCollector.collect(),
+                storage: StorageCollector.collect(),
+                browser: BrowserInfoCollector.collect(),
                 timestamp: new Date().toISOString()
             };
             
-            // 서버로 전송
-            fetch('/api/fingerprint', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(fingerprintData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log("✅ 핑거프린트 전송 완료:", data);
-            })
-            .catch(error => {
-                console.error("❌ 핑거프린트 전송 실패:", error);
+            // 비동기 정보 수집 완료 후 전송
+            let asyncDataCollected = 0;
+            const totalAsync = 3;
+            
+            const checkAndSend = function() {
+                asyncDataCollected++;
+                if (asyncDataCollected >= totalAsync) {
+                    DataSender.sendFingerprint(fingerprintData);
+                }
+            };
+            
+            // WebRTC IP 수집
+            WebRTCCollector.collect(function(ips) {
+                fingerprintData.webrtc_ips = ips;
+                checkAndSend();
             });
+            
+            // Battery 정보 수집
+            BatteryCollector.collect(function(battery) {
+                fingerprintData.battery_info = battery;
+                checkAndSend();
+            });
+            
+            // MediaDevices 정보 수집
+            MediaDevicesCollector.collect(function(devices) {
+                fingerprintData.media_devices = devices;
+                checkAndSend();
+            });
+            
+            // AudioContext는 별도로 처리 (시간이 좀 걸림)
+            AudioFingerprintCollector.collect(function(audio) {
+                fingerprintData.audio_fingerprint = audio;
+            });
+            
+            // 마우스 패턴 수집 시작
+            MousePatternCollector.start();
+            
+            // 키보드 패턴 수집 시작
+            KeyboardPatternCollector.start();
+            
+            // 5초 후 마우스 패턴 수집 및 전송
+            setTimeout(() => {
+                const mousePattern = MousePatternCollector.getPattern();
+                if (mousePattern) {
+                    DataSender.sendBehaviorPattern({
+                        user_id: userId,
+                        type: 'mouse_pattern',
+                        data: mousePattern,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }, 5000);
+            
+            // 15초 후 키보드 패턴 수집 및 전송
+            setTimeout(() => {
+                const keyboardPattern = KeyboardPatternCollector.getPattern();
+                if (keyboardPattern) {
+                    DataSender.sendBehaviorPattern({
+                        user_id: userId,
+                        type: 'keyboard_pattern',
+                        data: keyboardPattern,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }, 15000);
         })();
         
-        // 활동 로깅: 버튼 클릭 감지
+        // ============================================
+        // 활동 로깅
+        // ============================================
         document.addEventListener('DOMContentLoaded', function() {
+            const userId = UserIDManager.getOrCreateUserID();
             const purchaseButton = document.getElementById('purchase-button');
             const adBanner = document.getElementById('ad-banner');
             const statusDiv = document.getElementById('status');
             
             // 구매 버튼 클릭 이벤트
             purchaseButton.addEventListener('click', function() {
-                logActivity('purchase-button', '구매 버튼 클릭');
+                DataSender.sendActivity({
+                    user_id: userId,
+                    element_id: 'purchase-button',
+                    action: '구매 버튼 클릭',
+                    timestamp: new Date().toISOString(),
+                    url: window.location.href,
+                    user_agent: navigator.userAgent
+                });
                 statusDiv.textContent = '✅ 구매 버튼 클릭이 기록되었습니다.';
                 statusDiv.classList.remove('hidden');
                 setTimeout(() => statusDiv.classList.add('hidden'), 2000);
@@ -248,48 +964,35 @@
             
             // 광고 배너 클릭 이벤트
             adBanner.addEventListener('click', function() {
-                logActivity('ad-banner', '광고 배너 클릭');
+                DataSender.sendActivity({
+                    user_id: userId,
+                    element_id: 'ad-banner',
+                    action: '광고 배너 클릭',
+                    timestamp: new Date().toISOString(),
+                    url: window.location.href,
+                    user_agent: navigator.userAgent
+                });
                 statusDiv.textContent = '✅ 광고 배너 클릭이 기록되었습니다.';
                 statusDiv.classList.remove('hidden');
                 setTimeout(() => statusDiv.classList.add('hidden'), 2000);
             });
             
-            // 스크롤 이벤트 (추가 활동 로깅)
+            // 스크롤 이벤트
             let scrollTimeout;
             window.addEventListener('scroll', function() {
                 clearTimeout(scrollTimeout);
                 scrollTimeout = setTimeout(function() {
-                    logActivity('scroll', '페이지 스크롤');
-                }, 1000); // 스크롤이 멈춘 후 1초 뒤에 로그 기록
+                    DataSender.sendActivity({
+                        user_id: userId,
+                        element_id: 'scroll',
+                        action: '페이지 스크롤',
+                        timestamp: new Date().toISOString(),
+                        url: window.location.href,
+                        user_agent: navigator.userAgent
+                    });
+                }, 1000);
             });
         });
-        
-        // 활동 로그 전송 함수
-        function logActivity(elementId, action) {
-            const activityData = {
-                element_id: elementId,
-                action: action,
-                timestamp: new Date().toISOString(),
-                url: window.location.href,
-                user_agent: navigator.userAgent
-            };
-            
-            fetch('/api/log_event', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(activityData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log("✅ 활동 로그 전송 완료:", data);
-            })
-            .catch(error => {
-                console.error("❌ 활동 로그 전송 실패:", error);
-            });
-        }
     </script>
 </body>
 </html>
-

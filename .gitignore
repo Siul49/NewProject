@@ -29,3 +29,18 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Cursor IDE
+.cursor/
+
+# Gradle
+.gradle/
+
+# Other IDE
+.idea/
+*.iml
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
